@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>AI iERP — Cấu hình</title>
+    <style>
+      body { font-family: -apple-system, "Segoe UI", sans-serif; background: #f7f6f3; color: #2b2a28; display: flex; height: 100vh; margin: 0; align-items: center; justify-content: center; }
+      .card { background: #fff; border: 1px solid #e6e3dd; border-radius: 16px; padding: 32px; width: 380px; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      p { color: #8a857c; margin: 0 0 16px; font-size: 13px; }
+      input { width: 100%; box-sizing: border-box; border: 1px solid #e6e3dd; border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-bottom: 8px; }
+      input:focus { outline: none; border-color: #d97757; }
+      button { width: 100%; background: #d97757; color: #fff; border: none; border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; }
+      button:hover { background: #c4633f; }
+      .err { color: #c0392b; font-size: 13px; min-height: 18px; margin-bottom: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>AI iERP</h1>
+      <p>Nhập địa chỉ máy chủ (backend) để kết nối</p>
+      <input id="url" placeholder="http://localhost:8080" />
+      <div class="err" id="err"></div>
+      <button id="go">Kết nối</button>
+    </div>
+    <script>
+      (async () => {
+        const cur = await window.aiierp.setup.get();
+        document.getElementById('url').value = cur || 'http://localhost:8080';
+        const go = async () => {
+          const r = await window.aiierp.setup.save(document.getElementById('url').value);
+          if (!r.ok) document.getElementById('err').textContent = r.error;
+        };
+        document.getElementById('go').onclick = go;
+        document.getElementById('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+      })();
+    </script>
+  </body>
+</html>

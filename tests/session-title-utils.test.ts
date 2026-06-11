@@ -1,0 +1,67 @@
+import { describe, it, expect } from 'vitest';
+import {
+  buildTitlePrompt,
+  normalizeGeneratedTitle,
+  shouldGenerateTitle,
+} from '../src/main/session/session-title-utils';
+
+describe('session title utils', () => {
+  it('generates title only for first user message and default title', () => {
+    expect(
+      shouldGenerateTitle({
+        userMessageCount: 1,
+        currentTitle: 'Hello world',
+        prompt: 'Hello world',
+        hasAttempted: false,
+      })
+    ).toBe(true);
+
+    expect(
+      shouldGenerateTitle({
+        userMessageCount: 2,
+        currentTitle: 'Hello world',
+        prompt: 'Hello world',
+        hasAttempted: false,
+      })
+    ).toBe(false);
+  });
+
+  it('skips when title was manually changed', () => {
+    expect(
+      shouldGenerateTitle({
+        userMessageCount: 1,
+        currentTitle: 'Custom title',
+        prompt: 'Hello world',
+        hasAttempted: false,
+      })
+    ).toBe(false);
+  });
+
+  it('skips when already attempted', () => {
+    expect(
+      shouldGenerateTitle({
+        userMessageCount: 1,
+        currentTitle: 'Hello world',
+        prompt: 'Hello world',
+        hasAttempted: true,
+      })
+    ).toBe(false);
+  });
+
+  it('builds a prompt requiring the same language and no Chinese characters', () => {
+    const prompt = buildTitlePrompt('Help me make a PPT');
+    expect(prompt).toContain('Generate a short conversation title');
+    expect(prompt).toContain('SAME language');
+    expect(prompt).toContain('NEVER use Chinese characters');
+  });
+
+  it('normalizes generated title by taking first line and stripping quotes', () => {
+    const title = normalizeGeneratedTitle('"  My Title  "\nSecond line');
+    expect(title).toBe('My Title');
+  });
+
+  it('drops synthetic empty placeholder titles', () => {
+    expect(normalizeGeneratedTitle('(no content)')).toBeNull();
+    expect(normalizeGeneratedTitle('(empty content)')).toBeNull();
+  });
+});

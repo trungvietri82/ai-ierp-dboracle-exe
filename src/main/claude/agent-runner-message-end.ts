@@ -1,0 +1,132 @@
+import type { AssistantMessage, TextContent, ThinkingContent, ToolCall } from '@mariozechner/pi-ai';
+import { splitThinkTagBlocks } from './think-tag-parser';
+
+type MessageEndContentBlock = TextContent | ThinkingContent | ToolCall;
+
+type MessageEndMessage = Pick<AssistantMessage, 'role' | 'content' | 'stopReason' | 'errorMessage'>;
+
+interface ResolveMessageEndPayloadOptions {
+  message?: MessageEndMessage;
+  streamedText: string;
+}
+
+interface ResolvedMessageEndPayload {
+  effectiveContent: MessageEndContentBlock[];
+  errorText?: string;
+  nextStreamedText: string;
+  shouldEmitMessage: boolean;
+}
+
+export function toUserFacingErrorText(errorText: string): string {
+  const lower = errorText.toLowerCase();
+  if (lower.includes('first_response_timeout')) {
+    return 'Hết thời gian chờ phản hồi từ mô hình: chưa nhận được dữ liệu sau thời gian dài. Vui lòng thử lại hoặc kiểm tra tải của mô hình/gateway hiện tại.';
+  }
+  if (lower.includes('empty_success_result')) {
+    return 'Mô hình trả về kết quả rỗng. Có thể mô hình hoặc gateway hiện tại không tương thích — vui lòng thử lại hoặc đổi giao thức rồi thử lại.';
+  }
+  if (
+    /\b400\b/.test(errorText) ||
+    lower.includes('bad request') ||
+    lower.includes('invalid request')
+  ) {
+    return `Yêu cầu bị máy chủ từ chối (400), có thể do cấu hình mô hình/giao thức không tương thích. Vui lòng kiểm tra tên mô hình, thiết lập giao thức và API endpoint.\nLỗi gốc: ${errorText}`;
+  }
+  if (
+    /\b(401|403)\b/.test(errorText) ||
+    lower.includes('unauthorized') ||
+    lower.includes('forbidden')
+  ) {
+    return `Xác thực thất bại. Vui lòng kiểm tra API Key có đúng không, đã hết hạn chưa, hoặc không có quyền truy cập mô hình hiện tại.\nLỗi gốc: ${errorText}`;
+  }
+  if (
+    /\b429\b/.test(errorText) ||
+    lower.includes('rate limit') ||
+    lower.includes('too many requests')
+  ) {
+    return `Yêu cầu bị giới hạn tần suất (429). Tần suất gọi của mô hình hoặc API endpoint hiện tại đã đạt giới hạn. Vui lòng thử lại sau.\nLỗi gốc: ${errorText}`;
+  }
+  if (
+    /\b(5\d{2})\b/.test(errorText) ||
+    lower.includes('server error') ||
+    lower.includes('internal error') ||
+    lower.includes('service unavailable') ||
+    lower.includes('overloaded')
+  ) {
+    return `Máy chủ thượng nguồn gặp sự cố, có thể do quá tải hoặc lỗi tạm thời. Hệ thống sẽ tự động thử lại.\nLỗi gốc: ${errorText}`;
+  }
+  if (
+    lower.includes('terminated') ||
+    lower.includes('connection reset') ||
+    lower.includes('connection closed') ||
+    lower.includes('connection refused') ||
+    lower.includes('connection error') ||
+    lower.includes('fetch failed') ||
+    lower.includes('other side closed') ||
+    lower.includes('reset before headers') ||
+    lower.includes('upstream connect') ||
+    lower.includes('retry delay')
+  ) {
+    return `Kết nối mạng bị gián đoạn (${errorText}), có thể do proxy/gateway không ổn định. Hệ thống sẽ tự động thử lại.`;
+  }
+  return errorText;
+}
+
+export function resolveMessageEndPayload(
+  options: ResolveMessageEndPayloadOptions
+): ResolvedMessageEndPayload {
+  const { message, streamedText } = options;
+  const nextStreamedText = '';
+
+  if (message?.stopReason === 'error' && message.errorMessage) {
+    return {
+      effectiveContent: [],
+      errorText: toUserFacingErrorText(message.errorMessage),
+      nextStreamedText,
+      shouldEmitMessage: false,
+    };
+  }
+
+  const rawContent =
+    Array.isArray(message?.content) && message.content.length > 0
+      ? message.content
+      : streamedText
+        ? [{ type: 'text' as const, text: streamedText }]
+        : [];
+
+  if (rawContent.length === 0) {
+    return {
+      effectiveContent: [],
+      errorText: toUserFacingErrorText('empty_success_result'),
+      nextStreamedText,
+      shouldEmitMessage: false,
+    };
+  }
+
+  // Post-process: split any <think>...</think> tags in text blocks into
+  // separate thinking + text content blocks for proper UI rendering.
+  const effectiveContent: MessageEndContentBlock[] = [];
+  for (const block of rawContent) {
+    if (block.type === 'text') {
+      const splitBlocks = splitThinkTagBlocks(block.text);
+      for (const splitBlock of splitBlocks) {
+        if (splitBlock.type === 'thinking') {
+          effectiveContent.push({
+            type: 'thinking',
+            thinking: splitBlock.thinking,
+          } as ThinkingContent);
+        } else {
+          effectiveContent.push({ type: 'text', text: splitBlock.text } as TextContent);
+        }
+      }
+    } else {
+      effectiveContent.push(block);
+    }
+  }
+
+  return {
+    effectiveContent,
+    nextStreamedText,
+    shouldEmitMessage: effectiveContent.length > 0 && (message?.role === 'assistant' || !message),
+  };
+}

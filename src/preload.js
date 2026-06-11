@@ -6,6 +6,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('aiierp', {
   isDesktop: true,
   platform: process.platform,
+  pickFolder: () => ipcRenderer.invoke('local:pickFolder'),
+  openPath: (p) => ipcRenderer.invoke('local:openPath', p),
   setup: {
     get: () => ipcRenderer.invoke('setup:get'),
     save: (url) => ipcRenderer.invoke('setup:save', url),

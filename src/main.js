@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { exec } = require('node:child_process');
@@ -94,6 +94,13 @@ ipcMain.handle('local:exec', (_e, cmd) =>
     );
   })
 );
+
+// Pick a working directory + open a file/folder in the OS (for the context panel).
+ipcMain.handle('local:pickFolder', async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
+  return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+});
+ipcMain.handle('local:openPath', (_e, p) => shell.openPath(String(p)));
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {
